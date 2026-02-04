@@ -1,0 +1,28 @@
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-vintage-cream text-vintage-dark font-sans antialiased;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif text-vintage-navy font-bold;
+  }
+}
+
+.vintage-input {
+  @apply w-full px-4 py-3 bg-white border border-vintage-gray rounded-sm focus:outline-none focus:border-vintage-gold focus:ring-1 focus:ring-vintage-gold transition-all duration-200 text-vintage-dark placeholder-gray-400;
+}
+
+.vintage-button {
+  @apply w-full px-6 py-3 bg-vintage-navy text-white font-medium rounded-sm hover:bg-opacity-90 transition-all duration-200 shadow-vintage hover:shadow-vintage-hover active:transform active:scale-[0.98] tracking-wide;
+}
+
+.vintage-card {
+  @apply bg-white p-8 rounded-sm shadow-vintage border border-vintage-gray/30;
+}
+

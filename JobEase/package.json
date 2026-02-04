@@ -1,0 +1,16 @@
+{
+  "name": "jobease",
+  "version": "1.0.0",
+  "description": "JobEase - AI-powered mock interviews for students",
+  "scripts": {
+    "install-all": "cd frontend && npm install && cd ../backend && npm install",
+    "start": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd backend && npm start",
+    "client": "cd frontend && npm start",
+    "dev": "concurrently \"npm run server\" \"npm run client\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}
+
