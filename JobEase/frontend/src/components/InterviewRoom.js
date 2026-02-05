@@ -12,6 +12,7 @@ const InterviewRoom = () => {
   const [currentQuestion, setCurrentQuestion] = useState('');
   const [userResponse, setUserResponse] = useState('');
   const [isRecording, setIsRecording] = useState(false);
+  const [skills, setSkills] = useState([]);
   const [interviewHistory, setInterviewHistory] = useState([]);
   const [interimUserText, setInterimUserText] = useState('');
   const [timeLeftMs, setTimeLeftMs] = useState(0);
@@ -63,7 +64,7 @@ const InterviewRoom = () => {
     }
   };
 
-  const extractSkillsFromResume = async (resumeFile) => {
+  const processResume = async (resumeFile) => {
     const formData = new FormData();
     formData.append('resume', resumeFile);
     formData.append('type', type);
@@ -79,20 +80,23 @@ const InterviewRoom = () => {
       }
 
       const data = await response.json();
-      return data.skills;
+      return { skills: data.skills || [], questions: data.questions || [] };
     } catch (error) {
       console.error('Error processing resume:', error);
-      return ['JavaScript', 'React', 'Node.js', 'Python', 'SQL'];
+      return {
+        skills: ['JavaScript', 'React', 'Node.js', 'Python', 'SQL'],
+        questions: []
+      };
     }
   };
 
-  const generateQuestions = async (skills, interviewType) => {
+  const generateQuestions = async (currentSkills, interviewType) => {
     try {
       const response = await fetch('/api/generate-question', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          skills: skills,
+          skills: currentSkills,
           interviewType: interviewType,
           previousQuestions: []
         }),
@@ -112,7 +116,9 @@ const InterviewRoom = () => {
           "Tell me about a time when you had to work under pressure."
         ]
       };
-      return questions[interviewType] || questions.technical;
+      // Fix fallback access
+      const fallbackList = questions[interviewType] || questions.technical;
+      return fallbackList;
     }
   };
 
@@ -134,15 +140,24 @@ const InterviewRoom = () => {
     }
 
     try {
-      const skills = await extractSkillsFromResume(resume);
-      const questions = await generateQuestions(skills, type);
+      // 1. Process resume and get initial questions
+      const { skills: extractedSkills, questions: initialQuestions } = await processResume(resume);
+
+      setSkills(extractedSkills);
+
+      let finalQuestions = initialQuestions;
+
+      // 2. If no questions returned (edge case), try generating one
+      if (!finalQuestions || finalQuestions.length === 0) {
+        finalQuestions = await generateQuestions(extractedSkills, type);
+      }
 
       setIsInterviewStarted(true);
-      setCurrentQuestion(questions[0]);
-      setInterviewHistory([{ type: 'ai', content: questions[0] }]);
+      setCurrentQuestion(finalQuestions[0]);
+      setInterviewHistory([{ type: 'ai', content: finalQuestions[0] }]);
 
       // Auto-speak first question
-      speakText(questions[0]);
+      speakText(finalQuestions[0]);
 
       // Start 10-minute timer
       const endAt = Date.now() + 10 * 60 * 1000;
@@ -251,9 +266,10 @@ const InterviewRoom = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          skills: ['JavaScript', 'React'],
+          skills: skills.length > 0 ? skills : ['JavaScript', 'React'],
           interviewType: type,
-          previousQuestions: interviewHistory.filter(msg => msg.type === 'ai').map(msg => msg.content)
+          previousQuestions: interviewHistory.filter(msg => msg.type === 'ai').map(msg => msg.content),
+          userResponse: finalUser
         })
       });
 

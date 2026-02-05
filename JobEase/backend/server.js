@@ -125,7 +125,7 @@ async function generateQuestions(resumeText, skills, interviewType, count = 10, 
     const questions = [];
     for (let i = 0; i < count; i++) {
       const context = {
-        resumeText,
+        resumeText: resumeText || "",
         interviewType,
         domain: skills.slice(0, 5).join(', '),
         experienceLevel: 'mid-level',
@@ -137,45 +137,8 @@ async function generateQuestions(resumeText, skills, interviewType, count = 10, 
     return questions;
   } catch (error) {
     console.error('Error generating questions with model:', error);
-    const fallbackQuestions = {
-      technical: [
-        "Explain the difference between let, const, and var in JavaScript.",
-        "How would you optimize a React component that's re-rendering too frequently?",
-        "Describe the event loop in Node.js and how it handles asynchronous operations.",
-        "What's the difference between closures and scope in JavaScript?",
-        "How would you implement a debounce function from scratch?",
-        "Explain prototypal inheritance in JavaScript.",
-        "What is memoization and when would you use it?",
-        "How does HTTP/2 differ from HTTP/1.1?",
-        "What are React keys and why are they important?",
-        "Explain the CAP theorem."
-      ],
-      behavioral: [
-        "Tell me about a time when you had to work under pressure.",
-        "Describe a situation where you had to learn a new technology quickly.",
-        "Give me an example of how you handled a difficult team member.",
-        "Tell me about a project that didn't go as planned and how you handled it.",
-        "Describe a time when you had to explain a complex technical concept to a non-technical person.",
-        "Tell me about a time you received critical feedback and how you handled it.",
-        "Describe a situation where you had conflicting priorities.",
-        "How do you handle disagreements within a team?",
-        "Give an example of taking initiative.",
-        "Tell me about a time you failed and what you learned."
-      ],
-      mixed: [
-        "Walk me through how you would debug a performance issue in a web application.",
-        "Tell me about a challenging project you worked on and the technical decisions you made.",
-        "How do you stay updated with the latest technologies in your field?",
-        "Describe a time when you had to refactor legacy code. What was your approach?",
-        "Tell me about a time when you had to work with a difficult stakeholder on a technical project.",
-        "Explain a system you designed. What trade-offs did you make?",
-        "How would you design a rate limiter?",
-        "Describe a time you balanced speed vs. quality.",
-        "When is it appropriate to use microservices?"
-      ]
-    };
     // Build a non-repeating randomized list
-    const pool = fallbackQuestions[interviewType] || fallbackQuestions.technical;
+    const pool = FALLBACK_QUESTIONS[interviewType] || FALLBACK_QUESTIONS.technical;
     const filtered = pool.filter(q => !previousQuestions.includes(q));
     // Shuffle
     for (let i = filtered.length - 1; i > 0; i--) {
@@ -251,12 +214,9 @@ app.post('/api/process-resume', upload.single('resume'), async (req, res) => {
       questions = await generateQuestions(resumeText, skills, interviewType, 5, []);
     } catch (e) {
       console.error('Model generation failed, falling back:', e);
-      // Final guard fallback to static list
-      questions = [
-        'Tell me about yourself.',
-        'What are your strengths and weaknesses?',
-        'Describe a challenging project you worked on and your role.'
-      ];
+      // Final guard fallback to list
+      const pool = FALLBACK_QUESTIONS[interviewType] || FALLBACK_QUESTIONS.technical;
+      questions = pool.slice(0, 3);
     }
 
     // Clean up uploaded file (ignore errors)
@@ -351,6 +311,45 @@ async function extractSkillsFromResume(resumePath) {
 
 // This function is now imported from model_training_config.js
 
+// Define fallback questions at top level
+const FALLBACK_QUESTIONS = {
+  technical: [
+    "Explain the difference between let, const, and var in JavaScript.",
+    "How would you optimize a React component that's re-rendering too frequently?",
+    "Describe the event loop in Node.js and how it handles asynchronous operations.",
+    "What's the difference between closures and scope in JavaScript?",
+    "How would you implement a debounce function from scratch?",
+    "Explain prototypal inheritance in JavaScript.",
+    "What is memoization and when would you use it?",
+    "How does HTTP/2 differ from HTTP/1.1?",
+    "What are React keys and why are they important?",
+    "Explain the CAP theorem."
+  ],
+  behavioral: [
+    "Tell me about a time when you had to work under pressure.",
+    "Describe a situation where you had to learn a new technology quickly.",
+    "Give me an example of how you handled a difficult team member.",
+    "Tell me about a project that didn't go as planned and how you handled it.",
+    "Describe a time when you had to explain a complex technical concept to a non-technical person.",
+    "Tell me about a time you received critical feedback and how you handled it.",
+    "Describe a situation where you had conflicting priorities.",
+    "How do you handle disagreements within a team?",
+    "Give an example of taking initiative.",
+    "Tell me about a time you failed and what you learned."
+  ],
+  mixed: [
+    "Walk me through how you would debug a performance issue in a web application.",
+    "Tell me about a challenging project you worked on and the technical decisions you made.",
+    "How do you stay updated with the latest technologies in your field?",
+    "Describe a time when you had to refactor legacy code. What was your approach?",
+    "Tell me about a time when you had to work with a difficult stakeholder on a technical project.",
+    "Explain a system you designed. What trade-offs did you make?",
+    "How would you design a rate limiter?",
+    "Describe a time you balanced speed vs. quality.",
+    "When is it appropriate to use microservices?"
+  ]
+};
+
 async function generateNextQuestion(skills, interviewType, previousQuestions, userResponse) {
   // Enhanced follow-up question generation
   if (userResponse && userResponse.length > 0) {
@@ -359,7 +358,8 @@ async function generateNextQuestion(skills, interviewType, previousQuestions, us
   }
 
   // Generate next question from the skill-based pool
-  const availableQuestions = await generateQuestions(skills, interviewType, 20, previousQuestions);
+  // FIX: Added empty string for resumeText argument to match signature
+  const availableQuestions = await generateQuestions("", skills, interviewType, 20, previousQuestions);
 
   // Filter out previously asked questions
   const remainingQuestions = availableQuestions.filter(q =>
