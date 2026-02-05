@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import AudioChatInterface from './AudioChatInterface';
 import './InterviewRoom.css';
 
 const InterviewRoom = () => {
@@ -10,21 +9,19 @@ const InterviewRoom = () => {
 
   const [resume, setResume] = useState(null);
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
-  const [isInterviewActive, setIsInterviewActive] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState('');
   const [userResponse, setUserResponse] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [interviewHistory, setInterviewHistory] = useState([]);
-  const [showSpeechInterface, setShowSpeechInterface] = useState(false);
   const [interimUserText, setInterimUserText] = useState('');
   const [timeLeftMs, setTimeLeftMs] = useState(0);
+  const [notes, setNotes] = useState('');
+
   const timerRef = useRef(null);
   const lastAudioBase64Ref = useRef(null);
-
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recognitionRef = useRef(null);
-
 
   useEffect(() => {
     // Initialize speech recognition
@@ -85,7 +82,6 @@ const InterviewRoom = () => {
       return data.skills;
     } catch (error) {
       console.error('Error processing resume:', error);
-      // Fallback to default skills
       return ['JavaScript', 'React', 'Node.js', 'Python', 'SQL'];
     }
   };
@@ -94,9 +90,7 @@ const InterviewRoom = () => {
     try {
       const response = await fetch('/api/generate-question', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           skills: skills,
           interviewType: interviewType,
@@ -104,35 +98,32 @@ const InterviewRoom = () => {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to generate questions');
-      }
-
+      if (!response.ok) throw new Error('Failed to generate questions');
       const data = await response.json();
-      // When first starting, backend endpoint returns a single question; wrap as list
       return [data.question];
     } catch (error) {
       console.error('Error generating questions:', error);
-      // Fallback to default questions
       const questions = {
         technical: [
           "Explain the difference between let, const, and var in JavaScript.",
-          "How would you optimize a React component that's re-rendering too frequently?",
-          "Describe your experience with database design and normalization."
+          "How would you optimize a React component that's re-rendering too frequently?"
         ],
         behavioral: [
-          "Tell me about a time when you had to work under pressure.",
-          "Describe a situation where you had to learn a new technology quickly.",
-          "Give me an example of how you handled a difficult team member."
-        ],
-        mixed: [
-          "Walk me through how you would debug a performance issue in a web application.",
-          "Tell me about a challenging project you worked on and the technical decisions you made.",
-          "How do you stay updated with the latest technologies in your field?"
+          "Tell me about a time when you had to work under pressure."
         ]
       };
-
       return questions[interviewType] || questions.technical;
+    }
+  };
+
+  const speakText = (text) => {
+    if ('speechSynthesis' in window) {
+      speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      utterance.pitch = 1;
+      utterance.volume = 1.0;
+      speechSynthesis.speak(utterance);
     }
   };
 
@@ -149,7 +140,10 @@ const InterviewRoom = () => {
       setIsInterviewStarted(true);
       setCurrentQuestion(questions[0]);
       setInterviewHistory([{ type: 'ai', content: questions[0] }]);
-      setIsInterviewActive(true);
+
+      // Auto-speak first question
+      speakText(questions[0]);
+
       // Start 10-minute timer
       const endAt = Date.now() + 10 * 60 * 1000;
       setTimeLeftMs(endAt - Date.now());
@@ -160,33 +154,12 @@ const InterviewRoom = () => {
         if (remaining <= 0) {
           clearInterval(timerRef.current);
           timerRef.current = null;
-          setIsInterviewActive(false);
           endInterview();
         }
       }, 500);
     } catch (error) {
       console.error('Error starting interview:', error);
       alert('Failed to start interview. Please try again.');
-    }
-  };
-
-
-
-  const handleTranscriptComplete = (transcript) => {
-    // Handle complete transcript
-    setUserResponse(transcript);
-    setIsRecording(false);
-  };
-
-  const toggleSpeechInterface = () => {
-    setShowSpeechInterface(!showSpeechInterface);
-    if (!showSpeechInterface && 'speechSynthesis' in window && currentQuestion) {
-      // Speak the current question when entering audio mode
-      const utterance = new SpeechSynthesisUtterance(currentQuestion);
-      utterance.rate = 0.9;
-      utterance.pitch = 1;
-      utterance.volume = 0.8;
-      speechSynthesis.speak(utterance);
     }
   };
 
@@ -203,12 +176,10 @@ const InterviewRoom = () => {
 
           mediaRecorderRef.current.onstop = () => {
             const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-            // Convert to base64 for transport
             const reader = new FileReader();
             reader.onloadend = () => {
               const base64 = reader.result;
               lastAudioBase64Ref.current = base64;
-              console.log('Audio recorded:', audioBlob);
             };
             reader.readAsDataURL(audioBlob);
           };
@@ -218,7 +189,7 @@ const InterviewRoom = () => {
         })
         .catch((error) => {
           console.error('Error accessing microphone:', error);
-          alert('Microphone access denied. Please allow microphone access to continue.');
+          alert('Microphone access denied.');
         });
     } else {
       alert('Your browser does not support audio recording');
@@ -233,39 +204,19 @@ const InterviewRoom = () => {
   };
 
   const startSpeechRecognition = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.start();
-    }
+    if (recognitionRef.current) recognitionRef.current.start();
   };
 
   const stopSpeechRecognition = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
-  };
-
-  const speakText = (text) => {
-    if ('speechSynthesis' in window) {
-      // Cancel any current speech
-      speechSynthesis.cancel();
-
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.0; // Slightly faster for natural flow
-      utterance.pitch = 1;
-      utterance.volume = 1.0; // Max volume as requested
-
-      speechSynthesis.speak(utterance);
-    }
+    if (recognitionRef.current) recognitionRef.current.stop();
   };
 
   const nextQuestion = async () => {
     try {
-      // Push final user text to history
       const finalUser = userResponse || interimUserText;
       setInterviewHistory(prev => [...prev, { type: 'user', content: finalUser }]);
       setInterimUserText('');
 
-      // Optionally send audio to backend for feedback
       const feedbackResp = await fetch('/api/process-audio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -296,12 +247,11 @@ const InterviewRoom = () => {
         }
       }
 
-      // Generate next question
       const response = await fetch('/api/generate-question', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          skills: ['JavaScript', 'React', 'Node.js'],
+          skills: ['JavaScript', 'React'],
           interviewType: type,
           previousQuestions: interviewHistory.filter(msg => msg.type === 'ai').map(msg => msg.content)
         })
@@ -319,7 +269,7 @@ const InterviewRoom = () => {
       speakText(nextQ);
     } catch (error) {
       console.error('Error generating next turn:', error);
-      const nextQ = 'What are your thoughts on this approach?';
+      const nextQ = 'Could you elaborate on that?';
       setCurrentQuestion(nextQ);
       setInterviewHistory(prev => [...prev, { type: 'ai', content: nextQ }]);
       setUserResponse('');
@@ -336,103 +286,153 @@ const InterviewRoom = () => {
   };
 
   return (
-    <>
-      <div className="interview-room">
-        <div className="interview-header">
-          <h2>Interview Room - {type.charAt(0).toUpperCase() + type.slice(1)}</h2>
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            {isInterviewStarted && (
-              <div className="timer" aria-label="Time left">
-                {(() => {
-                  const totalSec = Math.ceil(timeLeftMs / 1000);
-                  const m = Math.floor(totalSec / 60).toString().padStart(2, '0');
-                  const s = (totalSec % 60).toString().padStart(2, '0');
-                  return `${m}:${s}`;
-                })()}
-              </div>
-            )}
-            <button onClick={endInterview} className="end-interview-btn">End Interview</button>
+    <div className="interview-room">
+      <header className="oxford-header">
+        <div className="header-brand">
+          <h2>JobEase</h2>
+        </div>
+        <div className="header-status">
+          <div className="status-item">
+            <span className="timer">
+              ⏱ {(() => {
+                const totalSec = Math.ceil(timeLeftMs / 1000);
+                const m = Math.floor(totalSec / 60).toString().padStart(2, '0');
+                const s = (totalSec % 60).toString().padStart(2, '0');
+                return `${m}:${s}`;
+              })()}
+            </span>
+          </div>
+          <div className="status-item">
+            Status: {isInterviewStarted ? 'Live' : 'Ready'}
           </div>
         </div>
+      </header>
 
-        <div className="interview-content">
-          {!isInterviewStarted ? (
-            <div className="resume-upload-section">
-              <h3>Upload Your Resume</h3>
-              <p>Upload your resume so we can generate personalized questions based on your skills and experience.</p>
+      {!isInterviewStarted ? (
+        <div className="upload-container">
+          <div className="resume-card">
+            <h3>Welcome to your Interview</h3>
+            <p>Please upload your resume to begin the personalized session.</p>
 
-              <div className="upload-area">
-                <input
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleResumeUpload}
-                  id="resume-upload"
-                  className="file-input"
-                />
-                <label htmlFor="resume-upload" className="upload-label">
-                  {resume ? `Selected: ${resume.name}` : 'Choose PDF File'}
-                </label>
-              </div>
-
-              <button
-                onClick={startInterview}
-                className="start-interview-btn"
-                disabled={!resume}
-              >
-                Start Interview
-              </button>
+            <div className="upload-area">
+              <input
+                type="file"
+                accept=".pdf"
+                onChange={handleResumeUpload}
+                id="resume-upload"
+                className="file-input"
+              />
+              <label htmlFor="resume-upload" className="file-upload-label">
+                {resume ? `Selected: ${resume.name}` : 'Select Resume (PDF)'}
+              </label>
             </div>
-          ) : (
-            <div className="interview-interface">
-              <div className="interview-history" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
-                <h3>Conversation</h3>
-                <div className="history-messages">
-                  {/* Current AI question on top if not in history yet */}
-                  {!interviewHistory.length && currentQuestion && (
-                    <div className="message ai">
-                      <strong>AI:</strong>
-                      <p className="text-lg font-medium">{currentQuestion}</p>
-                    </div>
-                  )}
-                  {interviewHistory.map((message, index) => (
-                    <div key={index} className={`message ${message.type}`}>
-                      <strong>{message.type === 'ai' ? 'AI' : 'You'}:</strong>
-                      <p>{message.content}</p>
-                    </div>
-                  ))}
-                  {interimUserText && (
-                    <div className="message user">
-                      <strong>You:</strong>
-                      <p>{interimUserText}</p>
-                    </div>
-                  )}
+
+            <button
+              onClick={startInterview}
+              className="start-btn"
+              disabled={!resume}
+            >
+              Start Interview
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="dashboard-grid">
+            {/* LEFT PANEL: Log */}
+            <div className="panel left-panel">
+              <div className="panel-header">
+                📝 Conversation Log
+              </div>
+              <div className="history-list">
+                {interviewHistory.map((msg, i) => (
+                  <div key={i} className={`chat-bubble ${msg.type}`}>
+                    <strong>{msg.type === 'ai' ? 'AI' : 'YOU'}: </strong>
+                    {msg.content}
+                  </div>
+                ))}
+                {interimUserText && (
+                  <div className="chat-bubble user">
+                    <strong>YOU: </strong> <span className="interim-text">{interimUserText}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* CENTER PANEL: Main Interaction */}
+            <div className="panel center-panel">
+              <div className="ai-avatar-container">
+                <div className="ai-avatar">
+                  🤖
+                </div>
+                <div className="question-display">
+                  "{currentQuestion}"
                 </div>
               </div>
+
+              <div className="mic-container">
+                <button
+                  onClick={() => {
+                    if (isRecording) {
+                      stopRecording();
+                      stopSpeechRecognition();
+                      nextQuestion();
+                    } else {
+                      startRecording();
+                      startSpeechRecognition();
+                    }
+                  }}
+                  className={`mic-button ${isRecording ? 'recording' : ''}`}
+                  title={isRecording ? "Stop & Submit" : "Click to Speak"}
+                >
+                  {isRecording ? '⏹' : '🎤'}
+                </button>
+              </div>
             </div>
-          )}
-        </div>
-      </div>
-      {/* Bottom center recording control */}
-      {isInterviewStarted && (
-        <div className="bottom-controls">
-          <button
-            onClick={() => {
-              if (isRecording) {
-                stopRecording();
-                stopSpeechRecognition();
-                nextQuestion();
-              } else {
-                startRecording();
-                startSpeechRecognition();
-              }
-            }}
-            className={`record-large-btn ${isRecording ? 'recording' : ''}`}
-          >
-            {isRecording ? '⏹️ Stop' : '🎤 Start Recording'}
-          </button>
-        </div>
+
+            {/* RIGHT PANEL: Tools */}
+            <div className="panel right-panel">
+              <div className="panel-header">
+                🛠 Tools & Notes
+              </div>
+              <div className="tools-grid">
+                <button className="tool-btn" onClick={() => speakText(currentQuestion)}>
+                  🔊 Repeat Question
+                </button>
+                <button className="tool-btn" onClick={() => nextQuestion()}>
+                  ⏭ Skip Question
+                </button>
+                <button className="tool-btn" onClick={() => alert("Take your time! The AI is waiting.")}>
+                  ⏳ Need 10s to think
+                </button>
+              </div>
+
+              <div className="notes-area">
+                <label style={{ fontSize: '0.9rem', fontWeight: 600, color: '#002147' }}>Quick Notes</label>
+                <textarea
+                  className="notes-input"
+                  placeholder="Type your thoughts here..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="footer-bar">
+            <button className="control-btn" onClick={() => {
+              stopRecording();
+              stopSpeechRecognition();
+            }}>
+              ⏸ Pause
+            </button>
+            <button className="control-btn danger" onClick={endInterview}>
+              🔴 End Interview
+            </button>
+          </div>
+        </>
       )}
-    </>
+    </div>
   );
 };
 
